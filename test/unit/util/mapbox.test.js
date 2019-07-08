@@ -897,7 +897,6 @@ test("mapbox", (t) => {
                 turnstileEvent.postTurnstileEvent(mapboxTileURLs);
                 event.postMapLoadEvent(mapboxTileURLs, 1, skuToken);
 
-
                 const turnstileReq = window.server.requests[0];
                 turnstileReq.respond(200);
                 const mapLoadReq = window.server.requests[1];

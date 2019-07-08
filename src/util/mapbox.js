@@ -438,7 +438,6 @@ export class TurnstileEvent extends TelemetryEvent {
         }
     }
 
-
     processRequests() {
         if (this.pendingRequest || this.queue.length === 0) {
             return;
