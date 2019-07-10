@@ -14,6 +14,7 @@ import EvaluationParameters from '../../style/evaluation_parameters';
 import type {
     Bucket,
     BucketParameters,
+    BucketFeature,
     IndexedFeature,
     PopulateParameters
 } from '../bucket';
@@ -57,6 +58,7 @@ class CircleBucket<Layer: CircleStyleLayer | HeatmapStyleLayer> implements Bucke
     indexBuffer: IndexBuffer;
 
     hasPattern: boolean;
+    sortFeaturesByKey: boolean;
     programConfigurations: ProgramConfigurationSet<Layer>;
     segments: SegmentVector;
     uploaded: boolean;
@@ -69,6 +71,9 @@ class CircleBucket<Layer: CircleStyleLayer | HeatmapStyleLayer> implements Bucke
         this.index = options.index;
         this.hasPattern = false;
 
+        const sortKey = this.layers[0].layout.get('circle-sort-key');
+        this.sortFeaturesByKey = sortKey.constantOr(1) !== undefined;
+
         this.layoutVertexArray = new CircleLayoutArray();
         this.indexArray = new TriangleIndexArray();
         this.segments = new SegmentVector();
@@ -78,12 +83,41 @@ class CircleBucket<Layer: CircleStyleLayer | HeatmapStyleLayer> implements Bucke
     }
 
     populate(features: Array<IndexedFeature>, options: PopulateParameters) {
+        const bucketFeatures = [];
+
         for (const {feature, index, sourceLayerIndex} of features) {
             if (this.layers[0]._featureFilter(new EvaluationParameters(this.zoom), feature)) {
                 const geometry = loadGeometry(feature);
-                this.addFeature(feature, geometry, index);
-                options.featureIndex.insert(feature, geometry, index, sourceLayerIndex, this.index);
+                const sortKey = this.sortFeaturesByKey ?
+                    lineSortKey.evaluate(feature, {}) :
+                    undefined;
+
+                const bucketFeature: BucketFeature = {
+                    sourceLayerIndex,
+                    index,
+                    geometry,
+                    properties: feature.properties,
+                    type: feature.type,
+                    patterns: {},
+                    sortKey
+                }
+
+                bucketFeatures.push(bucketFeature);
             }
+        }
+
+        if (this.sortFeaturesByKey) {
+            bucketFeatures.sort((a, b) => {
+                // a.sortKey is always a number when sortFeaturesByKey is true
+                return ((a.sortKey: any): number) - ((b.sortKey: any): number);
+            });
+        }
+
+        for (const bucketFeature of bucketFeatures) {
+            const {geometry, index, sourceLayerIndex} = bucketFeature;
+            const feature = features[index].feature;
+            this.addFeature(feature, geometry, index);
+            options.featureIndex.insert(feature, geometry, index, sourceLayerIndex, this.index);
         }
     }
 
@@ -117,7 +151,7 @@ class CircleBucket<Layer: CircleStyleLayer | HeatmapStyleLayer> implements Bucke
         this.segments.destroy();
     }
 
-    addFeature(feature: VectorTileFeature, geometry: Array<Array<Point>>, index: number) {
+    addFeature(feature: Feature, geometry: Array<Array<Point>>, index: number) {
         for (const ring of geometry) {
             for (const point of ring) {
                 const x = point.x;
